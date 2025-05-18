@@ -61,7 +61,6 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: "/home/alexander/Рабочий стол/images"
         
     steps:
       - name: Create tar files
@@ -71,10 +70,10 @@ jobs:
         run: docker rmi pythonapp:latest
 
       - name: Push tar files and docker-compose.yml on server
-        run: scp -P ${{ secrets.SERVER_PORT }} /home/alexander/'Рабочий стол'/images/pythonapp.tar ${{ secrets.SERVER_NAME }}@${{ secrets.SERVER }}:/home/${{ secrets.SERVER_NAME }}/tasks/docker
+        run: scp -P ${{ secrets.SERVER_PORT }} ./ ${{ secrets.SERVER_NAME }}@${{ secrets.SERVER }}:/home/${{ secrets.SERVER_NAME }}/tasks/docker
     
       - name: Clean working directory
-        run: rm -rf /home/alexander/'Рабочий стол'/images/*
+        run: rm -rf $GITHUB_WORKSPACE/*
 
       - name: Connect on Server with SSH and start app
         run: |
