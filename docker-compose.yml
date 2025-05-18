@@ -11,6 +11,7 @@ services:
     networks:
       - mynetwork
   pythonapp:
+    image: pythonapp:latest
     build: ./python_app
     ports:
       - 8000:8000
