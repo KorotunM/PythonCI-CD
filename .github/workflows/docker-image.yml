@@ -1,63 +1,87 @@
-name: Docker Image CI
+name: Docker Images Actions
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
+    branches: [ main ]
+    
 jobs:
   build:
-
-    runs-on: ubuntu-latest
-
+    name: Build
+    runs-on: self-hosted
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      - name: Add all repository
+        uses: actions/checkout@v3
+        
+      - name: Build all images
+        run: |
+          docker pull postgres:latest
+          docker compose build
+          
+      - name: Check existence images
+        run: |
+          docker image inspect postgres:latest
+          docker image inspect pythonapp:latest
+      
+      - name: Clean working directory
+        run: rm -rf $GITHUB_WORKSPACE/*
 
   test:
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:14
-        env:
-          POSTGRES_USER: kubsu
-          POSTGRES_PASSWORD: kubsu
-          POSTGRES_DB: kubsu
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_URL: postgresql+asyncpg://kubsu:kubsu@localhost:5432/kubsu
-
+    name: Test
+    runs-on: self-hosted
+    needs: build
     steps:
-    - uses: actions/checkout@v4
+      - name: Add all repository
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Run app
+        run: docker compose up -d
 
-    - name: Install dependencies
-      run: |
-        pip install .[test]
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in {1..5}; do
+            docker compose exec db pg_isready -U ${{ secrets.DB_DATA }} && break
+            echo "Waiting for Postgres: ($i/5)"
+            sleep 10
+          done
 
-    - name: Wait for Postgres
-      run: |
-        until pg_isready -h localhost -p 5432; do
-          echo "Waiting for postgres...";
-          sleep 2;
-        done
+      - name: Run tests in pythonapp containers
+        run: docker compose exec pythonapp pytest tests
 
-    - name: Run tests
-      run: |
-        pytest tests/
+      - name: Stop and remove containers (with tomes)
+        run: docker compose down -v
 
+      - name: Clean working directory
+        run: rm -rf $GITHUB_WORKSPACE/*
 
+  deploy:
+    name: Deploy
+    runs-on: self-hosted
+    needs: test
+    
+    defaults:
+      run:
+        shell: bash
+        
+    steps:
+      - name: Create tar files
+        run: docker save -o pythonapp.tar pythonapp:latest
+
+      - name: Delete pythonapp image
+        run: docker rmi pythonapp:latest
+
+      - name: Push tar files and docker-compose.yml on server
+        run: scp -P ${{ secrets.SERVER_PORT }} ./ ${{ secrets.SERVER_NAME }}@${{ secrets.SERVER }}:/home/${{ secrets.SERVER_NAME }}/tasks/docker
+    
+      - name: Clean working directory
+        run: rm -rf $GITHUB_WORKSPACE/*
+
+      - name: Connect on Server with SSH and start app
+        run: |
+          ssh ${{ secrets.SERVER_NAME }}@${{ secrets.SERVER }} -p ${{ secrets.SERVER_PORT }} \
+          "cd /home/${{ secrets.SERVER_NAME }}/tasks/docker && \
+          podman stop pythonappcon && \
+          podman rm pythonappcon && \
+          podman rmi pythonapp:latest && \
+          podman load -i pythonapp.tar && \
+          podman run -d --network=host --name pythonappcon -e DATABASE_URL="${{ secrets.DATABASE_URL }}" pythonapp:latest && \
+          rm pythonapp.tar"
