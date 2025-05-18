@@ -70,7 +70,8 @@ jobs:
         run: docker rmi pythonapp:latest
 
       - name: Push tar files and docker-compose.yml on server
-        run: scp -P ${{ secrets.SERVER_PORT }} ./ ${{ secrets.SERVER_NAME }}@${{ secrets.SERVER }}:/home/${{ secrets.SERVER_NAME }}/tasks/docker
+        run: scp -P ${{ secrets.SERVER_PORT }} ./pythonapp.tar ${{ secrets.SERVER_NAME }}@${{ secrets.SERVER }}:/home/${{ secrets.SERVER_NAME }}/tasks/docker
+
     
       - name: Clean working directory
         run: rm -rf $GITHUB_WORKSPACE/*
