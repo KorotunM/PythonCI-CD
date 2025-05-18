@@ -11,7 +11,7 @@ services:
     networks:
       - mynetwork
   pythonapp:
-    build: ./python_app
+    build: ./src
     ports:
       - 8000:8000
     environment:
